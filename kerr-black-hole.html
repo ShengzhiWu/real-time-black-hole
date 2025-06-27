@@ -5,11 +5,85 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Black hole</title>
+    <style>
+        .floating-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 30px;
+        }
+        
+        .toggle-btn {
+            height: 33px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 17px;
+            background-color: rgba(255, 255, 255, 0.137);
+            color: white;
+        }
+
+        .toggle-btn:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slider {
+            width: 200px;
+            height: 6px;
+            appearance: none;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        /* CSS for Firefox */
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+        
+        .mapped-value {
+            min-width: 60px;
+            text-align: left;
+            font-family: monospace;
+            color: white;
+        }
+    </style>
     <script src="https://unpkg.com/three@0.140.0/build/three.js"></script>
 </head>
 <body style="margin:0; padding:0; position:absolute;">
     <canvas id="canvas" style="margin:0; padding:0; position:absolute;"></canvas>
-    
+
+    <div class="floating-controls">
+        <button class="toggle-btn" id="toggleBtn" title="Background" style="width: 5em;">Stars</button>
+        
+        <div class="slider-container">
+            <input type="range" min="-1.45" max="1.45" step="0.01" value="0" class="slider" id="valueSlider">
+            <div class="mapped-value" id="mappedValue" style="width: 9em;"></div>
+        </div>
+    </div>
+
     <script>
         const canvas = document.querySelector('#canvas');
         canvas.width = window.innerWidth;
@@ -128,6 +202,8 @@
             uniform vec3 center_direction;
             uniform vec3 x_vector;
             uniform vec3 y_vector;
+            uniform int backgroun_mode;
+            uniform float grid_density;
             uniform sampler2D backgroun_x_pos;
             uniform sampler2D backgroun_x_neg;
             uniform sampler2D backgroun_y_pos;
@@ -151,6 +227,7 @@
 
             // Accretion disk
             uniform float accretion_disk_radius;
+            uniform float accretion_disk_min_radius;
             uniform float accretion_disk_thickness;
             uniform vec3 accretion_disk_density;
 
@@ -234,25 +311,40 @@
                 vec4 result;
 
                 if(v_abs.x >= v_abs.y && v_abs.x >= v_abs.z) {
-                    if(v.x >= 0.) {
-                        result = texture2D(backgroun_x_pos, v.yz * vec2(1., -1.) / v.x * 0.5 + 0.5) * background_brightness_factor;
+                    if(backgroun_mode == 0) {  // Stars
+                        if(v.x >= 0.)
+                            result = texture2D(backgroun_x_pos, v.yz * vec2(1., -1.) / v.x * 0.5 + 0.5) * background_brightness_factor;
+                        else
+                            result = texture2D(backgroun_x_neg, v.yz * -1. / v.x * 0.5 + 0.5) * background_brightness_factor;
                     }
-                    else
-                        result = texture2D(backgroun_x_neg, v.yz * -1. / v.x * 0.5 + 0.5) * background_brightness_factor;
+                    else {  // Grid
+                        vec2 a = abs(fract(v.yz * grid_density / v.x) - 0.5);
+                        result = vec4(vec3(a.x > 0.49 || a.y > 0.49), 1.);
+                    }
                 }
                 else if(v_abs.y >= v_abs.z) {
-                    if(v.y >= 0.) {
-                        result = texture2D(backgroun_y_pos, v.zx * vec2(1., -1.) / v.y * 0.5 + 0.5) * background_brightness_factor;
+                    if(backgroun_mode == 0) {  // Stars
+                        if(v.y >= 0.)
+                            result = texture2D(backgroun_y_pos, v.zx * vec2(1., -1.) / v.y * 0.5 + 0.5) * background_brightness_factor;
+                        else
+                            result = texture2D(backgroun_y_neg, v.zx * -1. / v.y * 0.5 + 0.5) * background_brightness_factor;
                     }
-                    else
-                        result = texture2D(backgroun_y_neg, v.zx * -1. / v.y * 0.5 + 0.5) * background_brightness_factor;
+                    else {  // Grid
+                        vec2 a = abs(fract(v.xz * grid_density / v.y) - 0.5);
+                        result = vec4(vec3(a.x > 0.49 || a.y > 0.49), 1.);
+                    }
                 }
                 else {
-                    if(v.z >= 0.) {
-                        result = texture2D(backgroun_z_pos, v.xy * vec2(1., -1.) / v.z * 0.5 + 0.5) * background_brightness_factor;
+                    if(backgroun_mode == 0) {  // Stars
+                        if(v.z >= 0.)
+                            result = texture2D(backgroun_z_pos, v.xy * vec2(1., -1.) / v.z * 0.5 + 0.5) * background_brightness_factor;
+                        else
+                            result = texture2D(backgroun_z_neg, v.xy * -1. / v.z * 0.5 + 0.5) * background_brightness_factor;
                     }
-                    else
-                        result = texture2D(backgroun_z_neg, v.xy * -1. / v.z * 0.5 + 0.5) * background_brightness_factor;
+                    else {  // Grid
+                        vec2 a = abs(fract(v.xy * grid_density / v.z) - 0.5);
+                        result = vec4(vec3(a.x > 0.49 || a.y > 0.49), 1.);
+                    }
                 }
 
                 return result;
@@ -272,10 +364,12 @@
                     float dt_factor = length(p.yzw) / schwarzschild_radius;
 
                     // Accretion disk
-                    float rho_relative = length(p.yz) / (schwarzschild_radius * accretion_disk_radius);
+                    float rho = length(p.yz);
+                    float rho_relative = rho / (schwarzschild_radius * accretion_disk_radius);
                     if (p.w > accretion_disk_thickness * -0.5 * (1. - rho_relative * 0.8)
                         && p.w < accretion_disk_thickness * 0.5 * (1. - rho_relative * 0.8)
-                        && rho_relative < 1.) {
+                        && rho_relative < 1.
+                        && rho > schwarzschild_radius * accretion_disk_min_radius) {
                         light_from_foreground += accretion_disk_density * pow(1. - rho_relative, 2.) * dt * dt_factor * texture2D(accretion_disk, vec2(rho_relative, atan(p.y, p.z) / 6.2832 + 0.5)).x;
                     }
 
@@ -298,7 +392,16 @@
             }
         `
 
+        function getISCO(M, J) {  // Unit: schwarzschild radius
+            const a = Math.abs(J / M);
+            if(a > 1)
+                return 0.5;
+            const x = a / M;
+            return 0.5 * (1 + 3.77177 * (1 - x) ** 0.4 - 2.76409 * (1 - x) ** 0.53 + 3.98935 * (1 - x) ** 0.8)
+        }
+
         const camera_vectors = get_camera_vectors();
+        let J = 0;
         const uniforms = {
             u_resolution:  { value: new THREE.Vector2(canvas.width, canvas.height) },
             location:  { value: camera_vectors.center_direction.clone().multiplyScalar(- camera_distance) },
@@ -308,6 +411,8 @@
             vector_used_for_orthogonalization_1: { value: camera_vectors.vector_used_for_orthogonalization_1 },
             vector_used_for_orthogonalization_2: { value: camera_vectors.vector_used_for_orthogonalization_2 },
 
+            backgroun_mode: {value: 0},  // 0: stars, 1: grid
+            grid_density: {value: 10},
             backgroun_x_pos: {value: backgroun_x_pos},
             backgroun_x_neg: {value: backgroun_x_neg},
             backgroun_y_pos: {value: backgroun_y_pos},
@@ -325,11 +430,12 @@
             c: {value: 1},
             G: {value: 1},
             M: {value: 1},  // 质量
-            J: {value: 0.9},  // 角动量（大于 M * c 会违背宇宙监督假设）
-            schwarzschild_radius_factor: {value: 0.0},
+            J: {value: J},  // 角动量（大于 M * c 会违背宇宙监督假设）
+            schwarzschild_radius_factor: {value: 0},  // 半径与史瓦西半径之比小于此值时停止光追 0.5
 
             // Accretion disk
-            accretion_disk_radius: {value: 15 },  // unit: schwarzschild radius
+            accretion_disk_radius: {value: 15},  // Unit: schwarzschild radius
+            accretion_disk_min_radius: {value: getISCO(1, J)},  // Unit: schwarzschild radius
             accretion_disk_thickness: {value: 0.7},
             accretion_disk_density: {value: new THREE.Vector3(0.5, 0.2, 0.13).multiplyScalar(4.)},
         };
@@ -391,6 +497,41 @@
 
             render();
         });
+    </script>
+
+    <!-- 控制部分 -->
+    <script>
+        const toggleBtn = document.getElementById('toggleBtn');
+        const valueSlider = document.getElementById('valueSlider');
+        const mappedValue = document.getElementById('mappedValue');
+        
+        // Toggle button functionality
+        toggleBtn.addEventListener('click', function() {
+            if (toggleBtn.textContent === 'Stars') {
+                toggleBtn.textContent = 'Grid';
+                material.uniforms.backgroun_mode.value = 1;
+            } else {
+                toggleBtn.textContent = 'Stars';
+                material.uniforms.backgroun_mode.value = 0;
+            }
+            render();
+        });
+        
+        // Slider functionality with value mapping
+        function updateMappedValue() {
+            const x = parseFloat(valueSlider.value);
+            const result = -x + 2 * Math.tan(x);  // 非线性映射
+            mappedValue.textContent = 'J / M = ' + result.toFixed(3);
+            material.uniforms.J.value = result;
+            material.uniforms.accretion_disk_min_radius.value = getISCO(1, result);
+
+            render();
+        }
+        
+        valueSlider.addEventListener('input', updateMappedValue);
+        
+        // Initialize
+        updateMappedValue();
     </script>
 </body>
 </html>
